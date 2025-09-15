@@ -425,6 +425,39 @@ struct matx_allocator {
   }  
 };
 
+/**
+ * @brief Holoscan allocator following the PMR interface using Holoscan memory management
+ * 
+ */
+template <typename T>
+struct holoscan_allocator {
+  friend void swap([[maybe_unused]] holoscan_allocator<T> &lhs, [[maybe_unused]] holoscan_allocator<T> &rhs) noexcept  { }   
+
+  /**
+   * @brief Allocate memory of at least ``size`` bytes using Holoscan allocator
+   * 
+   * @param size Size of allocation in bytes
+   * @return Pointer to allocated memory, or nullptr on error
+   */
+  __MATX_INLINE__ T* allocate(size_t size)
+  {
+    T *tmp;
+    matxAlloc(reinterpret_cast<void**>(&tmp), size);
+    return tmp;
+  }
+
+  /**
+   * @brief Deallocate memory of at least ``size`` bytes using Holoscan allocator
+   * 
+   * @param ptr Pointer to allocated data
+   * @param size Size of previously-allocated memory in bytes
+   */
+  __MATX_INLINE__ void deallocate(void *ptr, [[maybe_unused]] size_t size)
+  {
+    matxFree(ptr);
+  }  
+};
+
 __MATX_INLINE__ std::string SpaceString(matxMemorySpace_t space) {
   switch (space) {
     case MATX_MANAGED_MEMORY: return "CUDA managed memory";
