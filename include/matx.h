@@ -55,6 +55,10 @@
 #include "matx/core/utils.h"
 #include "matx/core/viz.h"
 
+#ifdef MATX_ENABLE_HOLOSCAN
+#include "matx/core/holoscan_allocator.h"
+#endif
+
 #include "matx/executors/executors.h"
 #include "matx/generators/generators.h"
 #include "matx/operators/operators.h"
