@@ -329,11 +329,11 @@ public:
  * @return New tensor using Holoscan memory allocation
  */
 template <typename T, int RANK>
-auto make_tensor_holoscan(const index_t (&shape)[RANK],
+auto make_holoscan_tensor(const index_t (&shape)[RANK],
                          std::shared_ptr<holoscan::Allocator> allocator,
                          matxMemorySpace_t space = MATX_DEVICE_MEMORY,
                          cudaStream_t stream = 0) {
-  MATX_NVTX_START("make_tensor_holoscan", matx::MATX_NVTX_LOG_API)
+  MATX_NVTX_START("make_holoscan_tensor", matx::MATX_NVTX_LOG_API)
 
   // Create a memory resource and allocator
   auto memory_resource = std::make_shared<holoscan_memory_resource>(allocator, space);
@@ -367,11 +367,11 @@ template <typename T, typename ShapeType,
   std::enable_if_t<!is_matx_shape_v<ShapeType> &&
                    !is_matx_descriptor_v<ShapeType> &&
                    !std::is_array_v<typename remove_cvref<ShapeType>::type>, bool> = true>
-auto make_tensor_holoscan(ShapeType &&shape,
+auto make_holoscan_tensor(ShapeType &&shape,
                          std::shared_ptr<holoscan::Allocator> allocator,
                          matxMemorySpace_t space = MATX_DEVICE_MEMORY,
                          cudaStream_t stream = 0) {
-  MATX_NVTX_START("make_tensor_holoscan", matx::MATX_NVTX_LOG_API)
+  MATX_NVTX_START("make_holoscan_tensor", matx::MATX_NVTX_LOG_API)
 
   // Create a memory resource and allocator
   auto memory_resource = std::make_shared<holoscan_memory_resource>(allocator, space);
@@ -403,14 +403,78 @@ auto make_tensor_holoscan(ShapeType &&shape,
  * @return New 0D tensor using Holoscan memory allocation
  */
 template <typename T>
-auto make_tensor_holoscan([[maybe_unused]] const std::initializer_list<detail::no_size_t> t,
+auto make_holoscan_tensor([[maybe_unused]] const std::initializer_list<detail::no_size_t> t,
                          std::shared_ptr<holoscan::Allocator> allocator,
                          matxMemorySpace_t space = MATX_DEVICE_MEMORY,
                          cudaStream_t stream = 0) {
-  MATX_NVTX_START("make_tensor_holoscan", matx::MATX_NVTX_LOG_API)
+  MATX_NVTX_START("make_holoscan_tensor", matx::MATX_NVTX_LOG_API)
   
   cuda::std::array<index_t, 0> shape;
-  return make_tensor_holoscan<T, decltype(shape)>(std::move(shape), allocator, space, stream);
+  return make_holoscan_tensor<T, decltype(shape)>(std::move(shape), allocator, space, stream);
+}
+
+/**
+ * @brief Create a tensor with user-defined memory and C array shape using Holoscan allocator
+ * 
+ * @tparam T Element type of the tensor
+ * @tparam RANK Rank (number of dimensions) of the tensor
+ * @param data Pointer to existing memory
+ * @param shape Shape of tensor as C array
+ * @param allocator Shared pointer to Holoscan allocator
+ * @param owning Whether this tensor owns the memory (default: false)
+ * @return New tensor wrapping existing memory with Holoscan allocator
+ */
+template <typename T, int RANK>
+auto make_holoscan_tensor(T *data,
+                         const index_t (&shape)[RANK],
+                         std::shared_ptr<holoscan::Allocator> allocator,
+                         bool owning = false) {
+  MATX_NVTX_START("make_holoscan_tensor", matx::MATX_NVTX_LOG_API)
+
+  // Create a memory resource for the allocator type consistency
+  auto memory_resource = std::make_shared<holoscan_memory_resource>(allocator, MATX_DEVICE_MEMORY);
+  holoscan_allocator<T> alloc(memory_resource.get());
+  
+  // Create descriptor
+  DefaultDescriptor<RANK> desc{shape};
+  
+  // Create storage wrapping existing memory
+  raw_pointer_buffer<T, holoscan_allocator<T>> rp{data, static_cast<size_t>(desc.TotalSize())*sizeof(T), owning};
+  basic_storage<decltype(rp)> s{std::move(rp)};
+  return tensor_t<T, RANK, decltype(s), decltype(desc)>{std::move(s), std::move(desc)};
+}
+
+/**
+ * @brief Create a tensor with user-defined memory and container shape using Holoscan allocator
+ * 
+ * @tparam T Element type of the tensor
+ * @tparam ShapeType Type of shape container
+ * @param data Pointer to existing memory
+ * @param shape Shape of tensor as container
+ * @param allocator Shared pointer to Holoscan allocator
+ * @param owning Whether this tensor owns the memory (default: false)
+ * @return New tensor wrapping existing memory with Holoscan allocator
+ */
+template <typename T, typename ShapeType,
+  std::enable_if_t<!is_matx_descriptor_v<ShapeType> && !std::is_array_v<typename remove_cvref<ShapeType>::type>, bool> = true>
+auto make_holoscan_tensor(T *data,
+                         ShapeType &&shape,
+                         std::shared_ptr<holoscan::Allocator> allocator,
+                         bool owning = false) {
+  MATX_NVTX_START("make_holoscan_tensor", matx::MATX_NVTX_LOG_API)
+
+  // Create a memory resource for the allocator type consistency
+  auto memory_resource = std::make_shared<holoscan_memory_resource>(allocator, MATX_DEVICE_MEMORY);
+  holoscan_allocator<T> alloc(memory_resource.get());
+  
+  // Create descriptor
+  constexpr int RANK = static_cast<int>(cuda::std::tuple_size<typename remove_cvref<ShapeType>::type>::value);
+  DefaultDescriptor<RANK> desc{std::forward<ShapeType>(shape)};
+  
+  // Create storage wrapping existing memory
+  raw_pointer_buffer<T, holoscan_allocator<T>> rp{data, static_cast<size_t>(desc.TotalSize())*sizeof(T), owning};
+  basic_storage<decltype(rp)> s{std::move(rp)};
+  return tensor_t<T, RANK, decltype(s), decltype(desc)>{std::move(s), std::move(desc)};
 }
 
 #endif // MATX_ENABLE_HOLOSCAN
